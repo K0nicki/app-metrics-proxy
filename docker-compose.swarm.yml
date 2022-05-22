@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  app-metrics-proxy:
+    image: app-metrics-proxy:latest
+    ports: 
+      - published: 2137
+        target: 2137
+        mode: host            # Bypass ingress network, do not load balance traffic
+    networks:
+      # Exporter requires access to application and monitor networks in order to scrape metrics from such 
+      # containers as cadvisor, node-exporter, sql, application exporters etc.
+      - monitor-network 
+      - application-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - PORTS="443 1201"      # Ports to scan: by default :80,:8080 and :9100 are scanned - here I expand this array with :443 and :1201
+      - SSHPASS=${SSHPASS}    # To ensure secure replication ssh is used. This is root passwd, keep it secure  
+    deploy:
+      mode: global            # Deploy to each node in swarm
+
+networks:
+  monitor-network:
+    name: monitor-network
+    driver: bridge

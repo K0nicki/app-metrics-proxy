@@ -2,13 +2,13 @@ version: "3.8"
 
 services:
   app-metrics-proxy:
-    image: app-metrics-proxy:latest
+    image: luzblu3s/app-metrics-proxy:latest
     ports: 
       - published: 2137
         target: 2137
         mode: host            # Bypass ingress network, do not load balance traffic
     networks:
-      # Exporter requires access to application and monitor networks in order to scrape metrics from such 
+      # Exporter requires access to the application and monitor networks in order to scrape metrics from such 
       # containers as cadvisor, node-exporter, sql, application exporters etc.
       - monitor-network 
       - application-network

@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-# Default http/-s, node exporter and cadvisor portsc
+# Default http, node exporter and cadvisor portsc
 ports=(80 8080 9100)
 metrics_path=$METRICS_PATH
 SSH_OPTS=('UserKnownHostsFile=/dev/null' 'StrictHostKeyChecking=no' 'LogLevel=ERROR')
@@ -17,7 +17,7 @@ getContainerNameByID() {
     docker ps -f "id=$1" --format "{{ .Names }}" | cut -d"_" -f2 |cut -d"." -f1
 }
 
-sleep 15    # All other app-metrics-proxy containers have to enter running state
+sleep 10    # All other app-metrics-proxy containers have to enter running state - 10s is enough
 
 # Update node IDs, containers in global mode
 if [ $(docker info --format '{{.Swarm.ControlAvailable}}') == "true" ]; then
@@ -70,8 +70,8 @@ while :; do
     done
     
     # Update local metrics, rm tmp location
-    cp -fR /tmp/metrics/* /var/www/html/
-    rm -rf /tmp/metrics
+    [[ -e /tmp/metrics ]] && cp -fR /tmp/metrics/* /var/www/html/ && \
+        rm -rf /tmp/metrics
 
     # Sync new data with other nodes
     # Notice that allNodeIDs array has entries only if node is a manager, so no neccessity to check if node is manager

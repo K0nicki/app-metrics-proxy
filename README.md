@@ -62,7 +62,7 @@ Replication is implemented with ssh and rsync commands. Every time when containe
 
 <p align="center">
     <img src="img/replication.png"/>
-    <figcaption align = "center"><b>Fig.1 - Monitoring multiple environments with Prometheus</b></figcaption>
+    <figcaption align = "center"><b>Fig.2 - App-metrics-proxy replication</b></figcaption>
 </p>
 
 ## Prometheus configuration

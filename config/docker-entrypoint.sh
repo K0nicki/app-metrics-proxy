@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-# Default http, node exporter and cadvisor portsc
+# Default http/-s, node exporter and cadvisor ports
 ports=(80 8080 9100)
 metrics_path=$METRICS_PATH
 SSH_OPTS=('UserKnownHostsFile=/dev/null' 'StrictHostKeyChecking=no' 'LogLevel=ERROR')
@@ -17,9 +17,9 @@ getContainerNameByID() {
     docker ps -f "id=$1" --format "{{ .Names }}" | cut -d"_" -f2 |cut -d"." -f1
 }
 
-sleep 10    # All other app-metrics-proxy containers have to enter running state - 10s is enough
+sleep 15    # All other app-metrics-proxy containers have to enter running state - 10s is enough
 
-# Update node IDs, containers in global mode
+# Update node IDs
 if [ $(docker info --format '{{.Swarm.ControlAvailable}}') == "true" ]; then
     unset allNodeIDs
     myNodeID=$(docker info -f '{{.Swarm.NodeID}}')
@@ -31,7 +31,6 @@ if [ $(docker info --format '{{.Swarm.ControlAvailable}}') == "true" ]; then
         [[ -n $result ]] && allNodeIDs=(${allNodeIDs[@]} $result) && \
             $(sshpass -e ssh-copy-id $(for i in ${SSH_OPTS[@]}; do echo -n "-o $i "; done) -p 22 $result || exit 0) || \
             echo "Error during sending ssh-id to $result"
-
     done
 
     unset result
@@ -43,9 +42,23 @@ while :; do
     start_time=$SECONDS # Tic
     containersIDs=$(docker ps -q)
 
-    # Ingore all containers deployed in global mode, don't want to sync them
     if [ $(docker info --format '{{.Swarm.ControlAvailable}}') == "true" ]; then
+        # Ignore all containers deployed in global mode, don't want to sync them
         CONTAINERS_TO_EXCLUDE=$(docker service ls --format '{{.Name}}' --filter "mode=global")
+
+        # Update node IDs
+        unset allNodeIDs
+        myNodeID=$(docker info -f '{{.Swarm.NodeID}}')
+        allNodeIDs_tmp=$(docker service ps monitoring_app-metrics-proxy -q --filter "desired-state=Running" | xargs docker inspect --format 'monitoring_app-metrics-proxy.{{.NodeID}}.{{.ID}}')
+        
+        for i in $allNodeIDs_tmp; do
+            result=$(echo $i |grep -v $myNodeID || exit 0)
+            [[ -n $result ]] && allNodeIDs=(${allNodeIDs[@]} $result)
+        done
+
+        unset result
+        unset myNodeID
+        unset allNodeIDs_tmp
     fi
 
     for container in $containersIDs; do
@@ -69,12 +82,15 @@ while :; do
         done
     done
     
-    # Update local metrics, rm tmp location
-    [[ -e /tmp/metrics ]] && cp -fR /tmp/metrics/* /var/www/html/ && \
-        rm -rf /tmp/metrics
+    # Service discovery
+    for dir in $(ls -1 /var/www/html); do
+        [[ -z "$(ls -1 /tmp/metrics/ |grep -v $dir || exit 0)" ]] && rm -rf /var/www/html/$dir
+    done
+
+    cp -fR /tmp/metrics/* /var/www/html
+    rm -rf /tmp/metrics
 
     # Sync new data with other nodes
-    # Notice that allNodeIDs array has entries only if node is a manager, so no neccessity to check if node is manager
     for node in ${allNodeIDs[@]}; do 
         $(
             sshpass -e \
@@ -92,7 +108,6 @@ while :; do
 
         # Logging
         echo "$(date -u): Sent files to $node"
-
     done
 
     echo "Collected all metrics in $(( SECONDS - start_time))sec."; # Toc

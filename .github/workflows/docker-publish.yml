@@ -61,8 +61,12 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          file: ./Dockerfile
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           labels: ${{ steps.meta.outputs.labels }}
+          repository: ${{ secrets.USERNAME }}/${{ IMAGE_NAME }}
+          secrets: |
+            GIT_AUTH_TOKEN=${{ github.token }}
 
       - name: Sign the published Docker image
         if: ${{ github.event_name != 'pull_request' }}

@@ -15,6 +15,7 @@ on:
     branches: [ master ]
 
 env:
+  REGISTRY: docker.io
   IMAGE_NAME: ${{ github.repository }}
 
 

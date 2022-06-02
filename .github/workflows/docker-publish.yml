@@ -16,7 +16,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: app-metrics-proxy
+  IMAGE_NAME: ${{ secrets.USERNAME }}/app-metrics-proxy
 
 
 jobs:

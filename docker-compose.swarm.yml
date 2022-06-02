@@ -23,4 +23,4 @@ services:
 networks:
   monitor-network:
     name: monitor-network
-    driver: bridge
+    driver: overlay

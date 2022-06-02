@@ -58,7 +58,9 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v{{major}}.{{minor}}
           labels: ${{ steps.meta.outputs.labels }}
           secrets: |
             GIT_AUTH_TOKEN=${{ github.token }}

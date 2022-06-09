@@ -5,6 +5,7 @@ ports=(80 8080 9100)
 metrics_path=$METRICS_PATH
 SSH_OPTS=('UserKnownHostsFile=/dev/null' 'StrictHostKeyChecking=no' 'LogLevel=ERROR')
 [[ -n $PORTS ]] && ports=(${ports[@]} ${PORTS})
+myNodeID=$(docker info -f '{{.Swarm.NodeID}}')
 
 # Run nginx
 /usr/sbin/nginx &
@@ -22,7 +23,6 @@ sleep 15    # All other app-metrics-proxy containers have to enter running state
 # Update node IDs
 if [ $(docker info --format '{{.Swarm.ControlAvailable}}') == "true" ]; then
     unset allNodeIDs
-    myNodeID=$(docker info -f '{{.Swarm.NodeID}}')
     allNodeIDs_tmp=$(docker service ps monitoring_app-metrics-proxy -q --filter "desired-state=Running" | xargs docker inspect --format 'monitoring_app-metrics-proxy.{{.NodeID}}.{{.ID}}')
     
     for i in $allNodeIDs_tmp; do
@@ -34,13 +34,13 @@ if [ $(docker info --format '{{.Swarm.ControlAvailable}}') == "true" ]; then
     done
 
     unset result
-    unset myNodeID
     unset allNodeIDs_tmp
 fi
 
 while :; do
     start_time=$SECONDS # Tic
     containersIDs=$(docker ps -q)
+    mkdir -p /tmp/metrics
 
     if [ $(docker info --format '{{.Swarm.ControlAvailable}}') == "true" ]; then
         # Ignore all containers deployed in global mode, don't want to sync them
@@ -48,7 +48,6 @@ while :; do
 
         # Update node IDs
         unset allNodeIDs
-        myNodeID=$(docker info -f '{{.Swarm.NodeID}}')
         allNodeIDs_tmp=$(docker service ps monitoring_app-metrics-proxy -q --filter "desired-state=Running" | xargs docker inspect --format 'monitoring_app-metrics-proxy.{{.NodeID}}.{{.ID}}')
         
         for i in $allNodeIDs_tmp; do
@@ -57,7 +56,6 @@ while :; do
         done
 
         unset result
-        unset myNodeID
         unset allNodeIDs_tmp
     fi
 
@@ -82,16 +80,20 @@ while :; do
         done
     done
     
-    # Service discovery
-    for dir in $(ls -1 /var/www/html); do
-        [[ -z "$(ls -1 /tmp/metrics/ |grep -v $dir || exit 0)" ]] && rm -rf /var/www/html/$dir
+    ls -1 /tmp/metrics/ > /tmp/synced-$myNodeID
+    
+    # Remove missing services 
+    for dir in $(ls -1 /var/www/html); do                                                                               # Foreach old container
+        if [[ -z "$(find /tmp/metrics/ -maxdepth 1 -name $dir)" && -z "$(grep $dir /tmp/synced* || exit 0)" ]]; then    # If disappeared and was not synced  
+                rm -rf /var/www/html/$dir                                                                               # Remove it
+        fi                            
     done
 
     cp -fR /tmp/metrics/* /var/www/html
-    rm -rf /tmp/metrics
+    rm -rf /tmp/metrics/*
 
     # Sync new data with other nodes
-    for node in ${allNodeIDs[@]}; do 
+    for node in ${allNodeIDs[@]}; do
         $(
             sshpass -e \
             rsync -arquI \
@@ -104,11 +106,30 @@ while :; do
             rsync -arquI \
             $(for excluded in ${CONTAINERS_TO_EXCLUDE[@]}; do echo -n "--exclude $(echo -n $excluded | cut -d"_" -f2 |cut -d"." -f1) "; done) --ignore-missing-args \
             -e "ssh $(for i in ${SSH_OPTS[@]}; do echo -n "-o $i "; done)" /var/www/html/ ${node}:/var/www/html/ || exit 0
-        )     
+        )  
+
+        # Prepare list of synced containers
+        # Remove global containers
+        for excluded in ${CONTAINERS_TO_EXCLUDE[@]}; do 
+            sed -i "/$excluded/d" /tmp/synced-$myNodeID
+        done
+
+        $(
+            sshpass -e \
+            rsync -aquI --ignore-missing-args \
+            -e "ssh $(for i in ${SSH_OPTS[@]}; do echo -n "-o $i "; done)" /tmp/synced-$myNodeID ${node}:/tmp/ || exit 0
+        )
+
+        $(
+            sshpass -e \
+            rsync -aquI --ignore-missing-args \
+            -e "ssh $(for i in ${SSH_OPTS[@]}; do echo -n "-o $i "; done)" ${node}:/tmp/synced-$(echo -n $node | awk -F '.' '{print $2}') /tmp/ || exit 0
+        )
 
         # Logging
         echo "$(date -u): Sent files to $node"
     done
+
 
     echo "Collected all metrics in $(( SECONDS - start_time))sec."; # Toc
     sleep $SCRAPE_INTERVAL

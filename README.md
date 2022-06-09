@@ -34,7 +34,7 @@ Above code snippet shows how to change default values. SSHPASS only is required 
 Every other parameter is optional, use them if you want to add additional ports, change path to scan or scrape interval.
 
 ## Swarm vs standalone containers
-Exporter behavies differently in case of environment where it works. If app-metrics-proxy exporter was deployed as standalone container it just collects metrics from each container on the same node. 
+Exporter behavies differently depending on environment where it works. If app-metrics-proxy exporter was deployed as standalone container it just collects metrics from each container on the same node. 
 
 However, in swarm environment it should be always deployed in global mode in order to collect metrics for each node. Because Prometheus is not able to recognize where service replicas currently are working, app-metrics-proxy synchronize data between each its instance hence Prometheus can easily reach out to any of them.
 
